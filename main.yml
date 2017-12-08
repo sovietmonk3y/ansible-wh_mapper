@@ -1,0 +1,75 @@
+---
+
+- hosts: wh_mapper
+
+  become: yes
+  become_user: root
+
+  roles:
+    - geerlingguy.git
+    - {
+        role: geerlingguy.mysql,
+        mysql_root_password: "",
+        mysql_user_password: ""
+      }
+    - geerlingguy.pip
+
+  vars:
+    path_to_python: /usr/bin/python
+    source_dir: /usr/share/wh_mapper
+
+  tasks:
+    - name: ensure libmysqlclient-dev system package is installed
+      apt:
+        name: libmysqlclient-dev
+        state: present
+
+    - name: ensure MySQL-python pip package is installed
+      pip:
+        name: mysql-python
+        state: present
+
+    - name: ensure wh_mapper MySQL db exists
+      mysql_db:
+        name: wh_mapper
+        state: present
+
+    - name: ensure South is installed
+      pip:
+        name: south
+        state: present
+
+    - name: ensure Django is installed
+      pip:
+        name: django
+        state: present
+        version: 1.5.2
+
+    - name: ensure Tornado is installed
+      pip:
+        name: tornado
+        state: present
+        version: 3.1.1
+
+    - name: ensure wh_mapper source code is present
+      git:
+        depth: 1
+        dest: "{{ source_dir}}"
+        repo: https://github.com/sovietmonk3y/wh_mapper.git
+
+    - name: run Django admin's syncdb
+      args:
+        chdir: "{{ source_dir }}"
+        creates: /var/lib/mysql/wh_mapper/auth_user.ibd
+      command: ./manage.py syncdb --noinput --migrate
+
+    - name: create systemd config for the wh_mapper Tornado service
+      template:
+        src: templates/wh_mapper.service.j2
+        dest: /etc/systemd/system/wh_mapper.service
+
+    - name: ensure wh_mapper Tornado service is running
+      service:
+        name: wh_mapper
+        state: started
+        enabled: yes
